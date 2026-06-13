@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { Download, Upload, Trash2, Check } from 'lucide-react';
 import { Button } from '@/components/common/Button';
 import { Card } from '@/components/common/Card';
@@ -14,9 +14,11 @@ export default function SettingsPage() {
   const { materials } = useMaterialStore();
   const { defaultResumeId, setDefaultResume } = useSettingsStore();
   
+  const [importing, setImporting] = useState(false);
+  
   const handleExport = async () => {
     try {
-      const dataToExport = [currentResume!, ...versions.map(v => v.resume)];
+      const dataToExport = currentResume ? [currentResume, ...versions.map(v => v.resume)] : versions.map(v => v.resume);
       const blob = await exportAllData(dataToExport, records, materials);
       const filename = `resume-optimizer-backup-${new Date().toISOString().split('T')[0]}.json`;
       downloadBlob(blob, filename);
@@ -30,19 +32,70 @@ export default function SettingsPage() {
     const file = e.target.files?.[0];
     if (!file) return;
     
+    setImporting(true);
+    
     try {
       const data = await importData(file);
-      alert(`导入成功！包含 ${data.resumes.length} 份简历`);
+      
+      if (data.resumes && data.resumes.length > 0) {
+        alert(`即将导入 ${data.resumes.length} 份简历、${data.deliveries?.length || 0} 条投递记录、${data.materials?.length || 0} 个素材`);
+        
+        if (confirm('是否覆盖现有数据？')) {
+          useResumeStore.getState().versions.length = 0;
+          useDeliveryStore.getState().records.length = 0;
+          useMaterialStore.getState().materials.length = 0;
+          
+          if (data.resumes) {
+            data.resumes.forEach(resume => {
+              useResumeStore.getState().saveVersion(resume.name || '导入的简历');
+            });
+          }
+          
+          if (data.deliveries) {
+            data.deliveries.forEach(record => {
+              useDeliveryStore.getState().addRecord(record);
+            });
+          }
+          
+          if (data.materials) {
+            data.materials.forEach(material => {
+              useMaterialStore.getState().addMaterial(material);
+            });
+          }
+          
+          alert('数据导入成功！页面将刷新以显示新数据。');
+          window.location.reload();
+        }
+      } else {
+        alert('导入文件为空或格式不正确');
+      }
     } catch (error) {
-      alert('导入失败，请检查文件格式');
+      alert('导入失败，请检查文件格式是否正确');
+    } finally {
+      setImporting(false);
     }
   };
   
   const handleClearData = () => {
     if (confirm('确定要清除所有数据吗？此操作不可恢复！')) {
       if (confirm('再次确认：所有简历、投递记录和素材都将被删除！')) {
-        clearResume();
-        alert('数据已清除');
+        localStorage.clear();
+        
+        useResumeStore.setState({
+          currentResume: null,
+          versions: [],
+          isAnalyzing: false,
+        });
+        
+        useDeliveryStore.setState({
+          records: [],
+        });
+        
+        useMaterialStore.setState({
+          materials: [],
+        });
+        
+        alert('所有数据已清除！页面将刷新。');
         window.location.reload();
       }
     }
@@ -118,21 +171,22 @@ export default function SettingsPage() {
                   <Download className="w-4 h-4 mr-2" />
                   导出数据
                 </Button>
-                <label>
+                <label className="cursor-pointer">
                   <input
                     type="file"
                     accept=".json"
                     onChange={handleImport}
                     className="hidden"
+                    disabled={importing}
                   />
-                  <Button variant="secondary" as="span">
+                  <Button variant="secondary" as="span" disabled={importing}>
                     <Upload className="w-4 h-4 mr-2" />
-                    导入数据
+                    {importing ? '导入中...' : '导入数据'}
                   </Button>
                 </label>
               </div>
               <p className="text-xs text-gray-500 mt-2">
-                导出的数据为 JSON 格式，包含所有简历、投递记录和素材
+                导出的数据为 JSON 格式，包含所有简历、投递记录和素材。导入将覆盖现有数据。
               </p>
             </div>
             
@@ -143,7 +197,7 @@ export default function SettingsPage() {
                 清除所有数据
               </Button>
               <p className="text-xs text-red-600 mt-2">
-                此操作不可恢复，请谨慎使用
+                此操作将删除所有简历版本、投递记录和素材，且不可恢复
               </p>
             </div>
           </div>
