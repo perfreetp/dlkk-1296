@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Upload, FileText, Loader2, ArrowRight } from 'lucide-react';
+import { Upload, FileText, Loader2, ArrowRight, Check } from 'lucide-react';
 import { Button } from '@/components/common/Button';
 import { Card } from '@/components/common/Card';
 import { Textarea } from '@/components/common/Input';
@@ -8,6 +8,7 @@ import { useResumeStore } from '@/stores/resumeStore';
 import { parsePDF } from '@/services/pdfService';
 import { parseTextToResume } from '@/utils/textParser';
 import { clsx } from 'clsx';
+import type { Resume } from '@/types/resume';
 
 export default function HomePage() {
   const navigate = useNavigate();
@@ -18,6 +19,7 @@ export default function HomePage() {
   const [text, setText] = useState('');
   const [parsing, setParsing] = useState(false);
   const [error, setError] = useState('');
+  const [parsedResume, setParsedResume] = useState<Resume | null>(null);
   
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const selectedFile = e.target.files?.[0];
@@ -40,9 +42,13 @@ export default function HomePage() {
     try {
       const content = await parsePDF(selectedFile);
       setText(content);
+      
+      const resume = parseTextToResume(content);
+      setParsedResume(resume);
     } catch (err) {
       setError('PDF 解析失败，请尝试手动粘贴文本');
       setFile(null);
+      setParsedResume(null);
     } finally {
       setParsing(false);
     }
@@ -56,17 +62,32 @@ export default function HomePage() {
     
     try {
       const resume = parseTextToResume(text);
-      importResume(text);
+      setParsedResume(resume);
       setError('');
     } catch (err) {
       setError('简历解析失败，请检查格式');
+      setParsedResume(null);
     }
   };
   
-  const handleStart = () => {
-    if (!text.trim()) {
+  const handleParseAndGo = () => {
+    if (!parsedResume) {
+      setError('请先解析简历');
+      return;
+    }
+    
+    importResume(parsedResume);
+    navigate('/edit');
+  };
+  
+  const handleGoToMatch = () => {
+    if (!parsedResume && !currentResume) {
       setError('请先导入简历');
       return;
+    }
+    
+    if (parsedResume) {
+      importResume(parsedResume);
     }
     navigate('/match');
   };
@@ -156,7 +177,10 @@ export default function HomePage() {
               label="粘贴简历内容"
               placeholder="请粘贴简历的完整内容，包括个人基本信息、教育背景、工作经历、项目经历、技能等..."
               value={text}
-              onChange={(e) => setText(e.target.value)}
+              onChange={(e) => {
+                setText(e.target.value);
+                setParsedResume(null);
+              }}
               rows={12}
             />
             
@@ -167,7 +191,11 @@ export default function HomePage() {
             )}
             
             <div className="mt-6 flex gap-3 justify-end">
-              <Button variant="secondary" onClick={() => setText('')}>
+              <Button variant="secondary" onClick={() => {
+                setText('');
+                setParsedResume(null);
+                setError('');
+              }}>
                 清空
               </Button>
               <Button variant="primary" onClick={handleTextImport}>
@@ -178,33 +206,127 @@ export default function HomePage() {
         )}
       </div>
       
-      {text && (
-        <Card title="简历预览" className="mb-6">
-          <div className="bg-gray-50 rounded-lg p-4 max-h-96 overflow-y-auto">
-            <pre className="whitespace-pre-wrap text-sm text-gray-700 font-sans">
-              {text}
-            </pre>
+      {parsedResume && (
+        <Card title="简历解析结果" className="mb-6">
+          <div className="grid md:grid-cols-4 gap-4 mb-4">
+            <div className="bg-blue-50 p-4 rounded-lg text-center">
+              <div className="text-2xl font-bold text-blue-600">
+                {parsedResume.sections.education.length}
+              </div>
+              <div className="text-sm text-gray-600 mt-1">教育背景</div>
+            </div>
+            <div className="bg-green-50 p-4 rounded-lg text-center">
+              <div className="text-2xl font-bold text-green-600">
+                {parsedResume.sections.experience.length}
+              </div>
+              <div className="text-sm text-gray-600 mt-1">工作经历</div>
+            </div>
+            <div className="bg-purple-50 p-4 rounded-lg text-center">
+              <div className="text-2xl font-bold text-purple-600">
+                {parsedResume.sections.projects.length}
+              </div>
+              <div className="text-sm text-gray-600 mt-1">项目经历</div>
+            </div>
+            <div className="bg-orange-50 p-4 rounded-lg text-center">
+              <div className="text-2xl font-bold text-orange-600">
+                {parsedResume.sections.skills.length}
+              </div>
+              <div className="text-sm text-gray-600 mt-1">技能</div>
+            </div>
           </div>
           
-          {currentResume && (
-            <div className="mt-4 p-3 bg-green-50 border border-green-200 rounded-lg text-green-700 text-sm">
-              ✓ 简历解析成功！包含 {currentResume.sections.experience.length} 条工作经历，{currentResume.sections.projects.length} 个项目，{currentResume.sections.skills.length} 项技能
+          {parsedResume.sections.basic.name && (
+            <div className="mb-4 p-3 bg-gray-50 rounded-lg">
+              <div className="font-medium text-gray-900">{parsedResume.sections.basic.name}</div>
+              {parsedResume.sections.basic.email && (
+                <div className="text-sm text-gray-600">{parsedResume.sections.basic.email}</div>
+              )}
+              {parsedResume.sections.basic.phone && (
+                <div className="text-sm text-gray-600">{parsedResume.sections.basic.phone}</div>
+              )}
             </div>
           )}
+          
+          {parsedResume.sections.education.length > 0 && (
+            <div className="mb-3">
+              <div className="text-sm font-medium text-gray-700 mb-2">教育背景</div>
+              {parsedResume.sections.education.map((edu, idx) => (
+                <div key={idx} className="text-sm text-gray-600 pl-3 border-l-2 border-blue-300 mb-1">
+                  {edu.school} - {edu.degree} {edu.major}
+                  {(edu.startDate || edu.endDate) && (
+                    <span className="text-xs text-gray-400 ml-2">
+                      {edu.startDate} - {edu.endDate}
+                    </span>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+          
+          {parsedResume.sections.experience.length > 0 && (
+            <div className="mb-3">
+              <div className="text-sm font-medium text-gray-700 mb-2">工作经历</div>
+              {parsedResume.sections.experience.map((exp, idx) => (
+                <div key={idx} className="text-sm text-gray-600 pl-3 border-l-2 border-green-300 mb-1">
+                  {exp.company} - {exp.position}
+                  {(exp.startDate || exp.endDate) && (
+                    <span className="text-xs text-gray-400 ml-2">
+                      {exp.startDate} - {exp.endDate}
+                    </span>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+          
+          {parsedResume.sections.projects.length > 0 && (
+            <div className="mb-3">
+              <div className="text-sm font-medium text-gray-700 mb-2">项目经历</div>
+              {parsedResume.sections.projects.map((proj, idx) => (
+                <div key={idx} className="text-sm text-gray-600 pl-3 border-l-2 border-purple-300 mb-1">
+                  {proj.name}
+                  {proj.role && <span className="ml-2">({proj.role})</span>}
+                </div>
+              ))}
+            </div>
+          )}
+          
+          {parsedResume.sections.skills.length > 0 && (
+            <div>
+              <div className="text-sm font-medium text-gray-700 mb-2">技能</div>
+              <div className="flex flex-wrap gap-2">
+                {parsedResume.sections.skills.slice(0, 10).map((skill, idx) => (
+                  <span key={idx} className="px-2 py-1 bg-orange-50 text-orange-700 rounded text-xs">
+                    {skill.name}
+                  </span>
+                ))}
+                {parsedResume.sections.skills.length > 10 && (
+                  <span className="px-2 py-1 bg-gray-100 text-gray-600 rounded text-xs">
+                    +{parsedResume.sections.skills.length - 10}
+                  </span>
+                )}
+              </div>
+            </div>
+          )}
+          
+          <div className="mt-6 flex gap-3 justify-center">
+            <Button variant="primary" size="lg" onClick={handleParseAndGo}>
+              <Check className="w-5 h-5 mr-2" />
+              确认并开始编辑
+            </Button>
+            <Button variant="secondary" size="lg" onClick={handleGoToMatch}>
+              <ArrowRight className="w-5 h-5 mr-2" />
+              前往职位匹配
+            </Button>
+          </div>
         </Card>
       )}
       
-      <div className="flex justify-center gap-4">
-        <Button
-          variant="primary"
-          size="lg"
-          onClick={handleStart}
-          disabled={!text}
-        >
-          开始分析
-          <ArrowRight className="w-5 h-5 ml-2" />
-        </Button>
-      </div>
+      {text && !parsedResume && (
+        <Card className="text-center py-8">
+          <p className="text-gray-600 mb-4">点击"解析简历"查看解析结果</p>
+        </Card>
+      )}
     </div>
   );
 }

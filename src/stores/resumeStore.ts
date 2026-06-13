@@ -7,34 +7,14 @@ interface ResumeState {
   versions: ResumeVersion[];
   isAnalyzing: boolean;
   
-  importResume: (content: string) => void;
+  importResume: (resume: Resume | string) => void;
   updateSection: (section: string, data: any) => void;
   saveVersion: (name: string) => void;
   setDefaultResume: (versionId: string) => void;
   getDefaultResume: () => Resume | null;
   clearResume: () => void;
+  setCurrentResume: (resume: Resume) => void;
 }
-
-const createEmptyResume = (): Resume => ({
-  id: crypto.randomUUID(),
-  name: '新简历',
-  isDefault: false,
-  createdAt: new Date(),
-  updatedAt: new Date(),
-  sections: {
-    basic: {
-      name: '',
-      email: '',
-      phone: '',
-      location: '',
-      summary: '',
-    },
-    education: [],
-    experience: [],
-    projects: [],
-    skills: [],
-  },
-});
 
 export const useResumeStore = create<ResumeState>()(
   persist(
@@ -43,31 +23,14 @@ export const useResumeStore = create<ResumeState>()(
       versions: [],
       isAnalyzing: false,
       
-      importResume: (content: string) => {
-        const resume = createEmptyResume();
-        const lines = content.split('\n').filter(line => line.trim());
-        
-        lines.forEach(line => {
-          const lowerLine = line.toLowerCase();
-          
-          if (lowerLine.includes('邮箱') || lowerLine.includes('email')) {
-            const match = line.match(/[\w.-]+@[\w.-]+\.\w+/);
-            if (match) resume.sections.basic.email = match[0];
-          }
-          
-          if (lowerLine.includes('电话') || lowerLine.includes('手机')) {
-            const match = line.match(/1[3-9]\d{9}/);
-            if (match) resume.sections.basic.phone = match[0];
-          }
-          
-          if (lowerLine.includes('姓名') || /^[A-Z\u4e00-\u9fa5]{2,4}$/.test(line.trim())) {
-            if (!resume.sections.basic.name && /^[A-Z\u4e00-\u9fa5]{2,4}$/.test(line.trim())) {
-              resume.sections.basic.name = line.trim();
-            }
-          }
-        });
-        
-        set({ currentResume: resume, isAnalyzing: false });
+      importResume: (input: Resume | string) => {
+        if (typeof input === 'string') {
+          const { parseTextToResume } = require('@/utils/textParser');
+          const resume = parseTextToResume(input);
+          set({ currentResume: resume, isAnalyzing: false });
+        } else {
+          set({ currentResume: input, isAnalyzing: false });
+        }
       },
       
       updateSection: (section: string, data: any) => {
@@ -102,17 +65,12 @@ export const useResumeStore = create<ResumeState>()(
       },
       
       setDefaultResume: (versionId: string) => {
-        const { versions, currentResume } = get();
+        const { versions } = get();
         const version = versions.find(v => v.id === versionId);
         if (!version) return;
         
-        const updatedVersion = {
-          ...version.resume,
-          isDefault: true,
-        };
-        
         set({
-          currentResume: updatedVersion,
+          currentResume: { ...version.resume, isDefault: true },
           versions: versions.map(v =>
             v.id === versionId
               ? { ...v, resume: { ...v.resume, isDefault: true } }
@@ -128,6 +86,10 @@ export const useResumeStore = create<ResumeState>()(
       
       clearResume: () => {
         set({ currentResume: null });
+      },
+      
+      setCurrentResume: (resume: Resume) => {
+        set({ currentResume: resume });
       },
     }),
     {

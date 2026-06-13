@@ -62,10 +62,15 @@ export default function DeliveryPage() {
       return;
     }
     
+    const recordData = {
+      ...formData,
+      deliveryDate: new Date(formData.deliveryDate),
+    };
+    
     if (editingRecord) {
-      updateRecord(editingRecord.id, formData);
+      updateRecord(editingRecord.id, recordData);
     } else {
-      addRecord(formData);
+      addRecord(recordData);
     }
     
     setShowModal(false);

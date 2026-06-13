@@ -1,28 +1,5 @@
 import type { SpellingError } from '@/types/common';
 
-const COMMON_TYPOS: Record<string, string> = {
-  '编程': '编程',
-  '程序': '程序',
-  '开发': '开发',
-  '系统': '系统',
-  '负责': '负责',
-  '管理': '管理',
-  '设计': '设计',
-  '实现': '实现',
-  '优化': '优化',
-  '测试': '测试',
-  '部署': '部署',
-  '维护': '维护',
-  '分析': '分析',
-  '数据': '数据',
-  '用户': '用户',
-  '产品': '产品',
-  '项目': '项目',
-  '团队': '团队',
-  '公司': '公司',
-  '经验': '经验',
-};
-
 const TYPO_PATTERNS: Array<{ pattern: RegExp; suggestion: string }> = [
   { pattern: /网络授制/, suggestion: '网络授制' },
   { pattern: /互联冈/, suggestion: '互联网' },
@@ -78,11 +55,14 @@ export function checkSpelling(text: string): SpellingError[] {
   return errors;
 }
 
-export function validateTimeline(
-  education: Array<{ startDate: string; endDate: string; school: string }>,
-  experience: Array<{ startDate: string; endDate: string; company: string }>,
-  projects: Array<{ startDate: string; endDate: string; name: string }>
-): Array<{
+export interface TimelineItem {
+  type: 'education' | 'experience' | 'project';
+  name: string;
+  startDate: string;
+  endDate: string;
+}
+
+export function validateTimeline(items: TimelineItem[]): Array<{
   type: 'error' | 'warning';
   section: string;
   index: number;
@@ -114,131 +94,96 @@ export function validateTimeline(
     return null;
   }
   
-  education.forEach((edu, idx) => {
-    const startYear = parseYear(edu.startDate);
-    const endYear = parseYear(edu.endDate);
+  items.forEach((item, idx) => {
+    const startYear = parseYear(item.startDate);
+    const endYear = parseYear(item.endDate);
+    const startMonth = parseMonth(item.startDate);
+    const endMonth = parseMonth(item.endDate);
     
-    if (startYear && endYear && startYear > endYear) {
-      issues.push({
-        type: 'error',
-        section: 'education',
-        index: idx,
-        message: `${edu.school || '教育经历'}：开始时间（${edu.startDate}）晚于结束时间（${edu.endDate}）`,
-      });
-    }
-    
-    if (startYear && startYear > new Date().getFullYear()) {
-      issues.push({
-        type: 'warning',
-        section: 'education',
-        index: idx,
-        message: `${edu.school || '教育经历'}：开始时间（${edu.startDate}）在当前年份之后`,
-      });
-    }
-    
-    if (endYear && endYear > new Date().getFullYear() && !edu.endDate.includes('至今')) {
-      issues.push({
-        type: 'warning',
-        section: 'education',
-        index: idx,
-        message: `${edu.school || '教育经历'}：毕业时间（${edu.endDate}）在当前年份之后，请确认`,
-      });
-    }
-  });
-  
-  experience.forEach((exp, idx) => {
-    const startYear = parseYear(exp.startDate);
-    const endYear = parseYear(exp.endDate);
-    const startMonth = parseMonth(exp.startDate);
-    const endMonth = parseMonth(exp.endDate);
-    
-    if (startMonth && endMonth && startMonth > endMonth) {
-      issues.push({
-        type: 'error',
-        section: 'experience',
-        index: idx,
-        message: `${exp.company || '工作经历'}：开始时间（${exp.startDate}）晚于结束时间（${exp.endDate}）`,
-      });
-    }
-    
-    if (startYear && startYear > new Date().getFullYear()) {
-      issues.push({
-        type: 'error',
-        section: 'experience',
-        index: idx,
-        message: `${exp.company || '工作经历'}：开始时间（${exp.startDate}）在当前年份之后`,
-      });
-    }
-    
-    if (startYear && endYear && endYear - startYear > 20) {
-      issues.push({
-        type: 'warning',
-        section: 'experience',
-        index: idx,
-        message: `${exp.company || '工作经历'}：工作时间（${exp.startDate} - ${exp.endDate}）超过20年，请确认时间是否正确`,
-      });
-    }
-  });
-  
-  projects.forEach((proj, idx) => {
-    const startYear = parseYear(proj.startDate);
-    const endYear = parseYear(proj.endDate);
-    const startMonth = parseMonth(proj.startDate);
-    const endMonth = parseMonth(proj.endDate);
-    
-    if (startMonth && endMonth && startMonth > endMonth) {
-      issues.push({
-        type: 'error',
-        section: 'project',
-        index: idx,
-        message: `${proj.name || '项目'}：开始时间（${proj.startDate}）晚于结束时间（${proj.endDate}）`,
-      });
-    }
-    
-    if (startYear && endYear && endYear - startYear > 5) {
-      issues.push({
-        type: 'warning',
-        section: 'project',
-        index: idx,
-        message: `${proj.name || '项目'}：项目时间（${proj.startDate} - ${proj.endDate}）超过5年，请确认时间是否正确`,
-      });
-    }
-  });
-  
-  const allItems = [
-    ...education.map(e => ({ ...e, type: 'education', parseYear })),
-    ...experience.map(e => ({ ...e, type: 'experience', parseYear })),
-    ...projects.map(p => ({ ...p, type: 'project', parseYear })),
-  ];
-  
-  allItems.sort((a, b) => {
-    const aYear = a.parseYear(a.startDate) || 0;
-    const bYear = b.parseYear(b.startDate) || 0;
-    return bYear - aYear;
-  });
-  
-  for (let i = 0; i < allItems.length - 1; i++) {
-    const current = allItems[i];
-    const next = allItems[i + 1];
-    
-    const currentEnd = current.parseYear(current.endDate) || 9999;
-    const nextEnd = next.parseYear(next.endDate) || 9999;
-    
-    if (current.type === 'experience' && next.type === 'experience') {
-      const currentStart = current.parseYear(current.startDate) || 0;
-      const nextStart = next.parseYear(next.startDate) || 0;
-      
-      if (currentEnd > nextStart && currentStart < nextEnd) {
-        const currentName = 'company' in current ? current.company : current.name || '经历';
-        const nextName = 'company' in next ? next.company : next.name || '经历';
-        
+    if (item.type === 'education') {
+      if (startYear && endYear && startYear > endYear) {
         issues.push({
-          type: 'warning',
-          section: current.type,
-          index: i,
-          message: `${currentName} 和 ${nextName} 的时间有重叠，请确认时间是否正确`,
+          type: 'error',
+          section: 'education',
+          index: idx,
+          message: `${item.name || '教育经历'}：开始时间（${item.startDate}）晚于结束时间（${item.endDate}）`,
         });
       }
+      
+      if (startYear && startYear > new Date().getFullYear()) {
+        issues.push({
+          type: 'warning',
+          section: 'education',
+          index: idx,
+          message: `${item.name || '教育经历'}：开始时间（${item.startDate}）在当前年份之后`,
+        });
+      }
+      
+      if (endYear && endYear > new Date().getFullYear() && !item.endDate.includes('至今')) {
+        issues.push({
+          type: 'warning',
+          section: 'education',
+          index: idx,
+          message: `${item.name || '教育经历'}：结束时间（${item.endDate}）在当前年份之后，请确认`,
+        });
+      }
+    }
+    
+    if (item.type === 'experience' || item.type === 'project') {
+      if (startMonth && endMonth && startMonth > endMonth) {
+        issues.push({
+          type: 'error',
+          section: item.type,
+          index: idx,
+          message: `${item.name || '经历'}：开始时间（${item.startDate}）晚于结束时间（${item.endDate}）`,
+        });
+      }
+      
+      if (startYear && startYear > new Date().getFullYear()) {
+        issues.push({
+          type: 'error',
+          section: item.type,
+          index: idx,
+          message: `${item.name || '经历'}：开始时间（${item.startDate}）在当前年份之后`,
+        });
+      }
+      
+      if (startYear && endYear && endYear - startYear > 20) {
+        issues.push({
+          type: 'warning',
+          section: item.type,
+          index: idx,
+          message: `${item.name || '经历'}：工作时间（${item.startDate} - ${item.endDate}）超过20年，请确认时间是否正确`,
+        });
+      }
+      
+      if (item.type === 'project' && startYear && endYear && endYear - startYear > 5) {
+        issues.push({
+          type: 'warning',
+          section: item.type,
+          index: idx,
+          message: `${item.name || '项目'}：项目时间（${item.startDate} - ${item.endDate}）超过5年，请确认时间是否正确`,
+        });
+      }
+    }
+  });
+  
+  const experiences = items.filter(i => i.type === 'experience');
+  for (let i = 0; i < experiences.length - 1; i++) {
+    const current = experiences[i];
+    const next = experiences[i + 1];
+    
+    const currentStart = parseYear(current.startDate) || 0;
+    const currentEnd = parseYear(current.endDate) || 9999;
+    const nextStart = parseYear(next.startDate) || 0;
+    
+    if (currentEnd > nextStart && currentStart < nextStart) {
+      issues.push({
+        type: 'warning',
+        section: 'experience',
+        index: i,
+        message: `${current.name} 和 ${next.name} 的时间有重叠，请确认时间是否正确`,
+      });
     }
   }
   
@@ -256,27 +201,38 @@ export interface FullValidationResult {
 }
 
 export function validateResume(
-  resume: {
-    sections: {
-      education: Array<{ startDate: string; endDate: string; school: string }>;
-      experience: Array<{ startDate: string; endDate: string; company: string }>;
-      projects: Array<{ startDate: string; endDate: string; name: string }>;
-    };
-  }
+  resume: any
 ): FullValidationResult {
   const allText = [
-    resume.sections.basic?.summary || '',
-    ...resume.sections.education.map(e => `${e.school} ${e.degree || ''} ${e.major || ''}`),
-    ...resume.sections.experience.map(e => `${e.company} ${e.position || ''} ${e.description || ''}`),
-    ...resume.sections.projects.map(p => `${p.name} ${p.role || ''} ${p.description || ''}`),
+    resume.sections?.basic?.summary || '',
+    ...(resume.sections?.education || []).map((e: any) => `${e.school || ''} ${e.degree || ''} ${e.major || ''}`),
+    ...(resume.sections?.experience || []).map((e: any) => `${e.company || ''} ${e.position || ''} ${e.description || ''}`),
+    ...(resume.sections?.projects || []).map((p: any) => `${p.name || ''} ${p.role || ''} ${p.description || ''}`),
   ].join(' ');
+  
+  const timelineItems: TimelineItem[] = [
+    ...(resume.sections?.education || []).map((e: any) => ({
+      type: 'education' as const,
+      name: e.school || '',
+      startDate: e.startDate || '',
+      endDate: e.endDate || '',
+    })),
+    ...(resume.sections?.experience || []).map((e: any) => ({
+      type: 'experience' as const,
+      name: e.company || '',
+      startDate: e.startDate || '',
+      endDate: e.endDate || '',
+    })),
+    ...(resume.sections?.projects || []).map((p: any) => ({
+      type: 'project' as const,
+      name: p.name || '',
+      startDate: p.startDate || '',
+      endDate: p.endDate || '',
+    })),
+  ];
   
   return {
     spellingErrors: checkSpelling(allText),
-    timelineIssues: validateTimeline(
-      resume.sections.education,
-      resume.sections.experience,
-      resume.sections.projects
-    ),
+    timelineIssues: validateTimeline(timelineItems),
   };
 }

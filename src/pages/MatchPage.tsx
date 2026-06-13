@@ -26,6 +26,7 @@ export default function MatchPage() {
     
     if (!currentResume) {
       setError('请先导入简历');
+      navigate('/');
       return;
     }
     
@@ -65,6 +66,20 @@ export default function MatchPage() {
         </p>
       </div>
       
+      {currentResume && (
+        <Card className="mb-6">
+          <div className="text-sm text-gray-600 mb-4">
+            当前简历：<span className="font-medium text-gray-900">{currentResume.sections.basic.name || '未命名简历'}</span>
+            <span className="ml-4">
+              教育背景 {currentResume.sections.education.length} 条 |
+              工作经历 {currentResume.sections.experience.length} 条 |
+              项目经历 {currentResume.sections.projects.length} 条 |
+              技能 {currentResume.sections.skills.length} 条
+            </span>
+          </div>
+        </Card>
+      )}
+      
       <Card className="mb-6">
         <Input
           label="目标岗位描述"
@@ -81,8 +96,8 @@ export default function MatchPage() {
         )}
         
         <div className="mt-6 flex justify-end gap-3">
-          <Button variant="secondary" onClick={() => navigate('/')}>
-            返回
+          <Button variant="secondary" onClick={() => navigate('/edit')}>
+            前往编辑
           </Button>
           <Button
             variant="primary"
@@ -186,8 +201,8 @@ export default function MatchPage() {
           )}
           
           <div className="flex justify-center gap-4">
-            <Button variant="secondary" onClick={() => navigate('/')}>
-              重新导入
+            <Button variant="secondary" onClick={() => navigate('/edit')}>
+              前往编辑
             </Button>
             <Button
               variant="primary"
