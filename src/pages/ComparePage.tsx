@@ -4,9 +4,19 @@ import { ArrowLeft, Check, X } from 'lucide-react';
 import { Button } from '@/components/common/Button';
 import { Card } from '@/components/common/Card';
 import { useResumeStore } from '@/stores/resumeStore';
-import type { DiffResult } from '@/types/common';
 import type { Resume } from '@/types/resume';
 import { clsx } from 'clsx';
+
+interface DiffItem {
+  id: string;
+  section: string;
+  field: string;
+  index: number;
+  type: 'added' | 'removed' | 'modified' | 'unchanged';
+  leftValue: string;
+  rightValue: string;
+  displayText: string;
+}
 
 export default function ComparePage() {
   const navigate = useNavigate();
@@ -14,8 +24,7 @@ export default function ComparePage() {
   
   const [leftVersionId, setLeftVersionId] = useState<string | null>(null);
   const [rightVersionId, setRightVersionId] = useState<string | null>(null);
-  const [appliedChanges, setAppliedChanges] = useState<Set<number>>(new Set());
-  const [appliedCount, setAppliedCount] = useState(0);
+  const [selectedDiffs, setSelectedDiffs] = useState<Set<string>>(new Set());
   
   useEffect(() => {
     if (versions.length > 0 && !rightVersionId) {
@@ -39,115 +48,235 @@ export default function ComparePage() {
   const leftVersion = leftVersionId ? getVersionById(leftVersionId) : null;
   const rightVersion = rightVersionId ? getVersionById(rightVersionId) : null;
   
-  const generateDiffs = (): DiffResult[] => {
+  const generateDiffs = (): DiffItem[] => {
     if (!leftVersion || !rightVersion) return [];
     
-    const diffs: DiffResult[] = [];
+    const diffs: DiffItem[] = [];
+    let idCounter = 0;
     
     if (leftVersion.sections.basic.name !== rightVersion.sections.basic.name) {
       diffs.push({
-        type: leftVersion.sections.basic.name ? 'removed' : 'added',
-        content: `姓名: ${leftVersion.sections.basic.name || rightVersion.sections.basic.name}`,
+        id: `basic-name-${idCounter++}`,
+        section: 'basic',
+        field: 'name',
+        index: -1,
+        type: 'modified',
+        leftValue: leftVersion.sections.basic.name,
+        rightValue: rightVersion.sections.basic.name,
+        displayText: `姓名: "${rightVersion.sections.basic.name}" (原: "${leftVersion.sections.basic.name}")`,
       });
     }
     
     if (leftVersion.sections.basic.email !== rightVersion.sections.basic.email) {
       diffs.push({
-        type: leftVersion.sections.basic.email ? 'removed' : 'added',
-        content: `邮箱: ${leftVersion.sections.basic.email || rightVersion.sections.basic.email}`,
+        id: `basic-email-${idCounter++}`,
+        section: 'basic',
+        field: 'email',
+        index: -1,
+        type: 'modified',
+        leftValue: leftVersion.sections.basic.email,
+        rightValue: rightVersion.sections.basic.email,
+        displayText: `邮箱: "${rightVersion.sections.basic.email}" (原: "${leftVersion.sections.basic.email}")`,
       });
     }
     
     if (leftVersion.sections.basic.summary !== rightVersion.sections.basic.summary) {
       diffs.push({
+        id: `basic-summary-${idCounter++}`,
+        section: 'basic',
+        field: 'summary',
+        index: -1,
         type: 'modified',
-        content: `个人简介: ${rightVersion.sections.basic.summary}`,
+        leftValue: leftVersion.sections.basic.summary,
+        rightValue: rightVersion.sections.basic.summary,
+        displayText: `个人简介: "${rightVersion.sections.basic.summary}"`,
       });
     }
     
-    const leftExpCount = leftVersion.sections.experience.length;
-    const rightExpCount = rightVersion.sections.experience.length;
+    const maxEdu = Math.max(
+      leftVersion.sections.education.length,
+      rightVersion.sections.education.length
+    );
     
-    if (leftExpCount !== rightExpCount) {
-      diffs.push({
-        type: rightExpCount > leftExpCount ? 'added' : 'removed',
-        content: `工作经历: ${rightExpCount > leftExpCount ? '新增' : '删除'} ${Math.abs(rightExpCount - leftExpCount)} 条`,
-      });
+    for (let i = 0; i < maxEdu; i++) {
+      const leftEdu = leftVersion.sections.education[i];
+      const rightEdu = rightVersion.sections.education[i];
+      
+      if (!leftEdu && rightEdu) {
+        diffs.push({
+          id: `edu-add-${idCounter++}`,
+          section: 'education',
+          field: 'add',
+          index: i,
+          type: 'added',
+          leftValue: '',
+          rightValue: JSON.stringify(rightEdu),
+          displayText: `教育背景 [${i + 1}]: ${rightEdu.school} - ${rightEdu.degree}`,
+        });
+      } else if (leftEdu && !rightEdu) {
+        diffs.push({
+          id: `edu-remove-${idCounter++}`,
+          section: 'education',
+          field: 'remove',
+          index: i,
+          type: 'removed',
+          leftValue: JSON.stringify(leftEdu),
+          rightValue: '',
+          displayText: `教育背景 [${i + 1}]: ${leftEdu.school} - ${leftEdu.degree}`,
+        });
+      } else if (leftEdu && rightEdu) {
+        if (leftEdu.school !== rightEdu.school) {
+          diffs.push({
+            id: `edu-school-${idCounter++}`,
+            section: 'education',
+            field: 'school',
+            index: i,
+            type: 'modified',
+            leftValue: leftEdu.school,
+            rightValue: rightEdu.school,
+            displayText: `教育背景 [${i + 1}] 学校: "${rightEdu.school}" (原: "${leftEdu.school}")`,
+          });
+        }
+        if (leftEdu.degree !== rightEdu.degree) {
+          diffs.push({
+            id: `edu-degree-${idCounter++}`,
+            section: 'education',
+            field: 'degree',
+            index: i,
+            type: 'modified',
+            leftValue: leftEdu.degree,
+            rightValue: rightEdu.degree,
+            displayText: `教育背景 [${i + 1}] 学位: "${rightEdu.degree}" (原: "${leftEdu.degree}")`,
+          });
+        }
+      }
     }
     
-    const maxExp = Math.max(leftExpCount, rightExpCount);
+    const maxExp = Math.max(
+      leftVersion.sections.experience.length,
+      rightVersion.sections.experience.length
+    );
+    
     for (let i = 0; i < maxExp; i++) {
       const leftExp = leftVersion.sections.experience[i];
       const rightExp = rightVersion.sections.experience[i];
       
       if (!leftExp && rightExp) {
         diffs.push({
+          id: `exp-add-${idCounter++}`,
+          section: 'experience',
+          field: 'add',
+          index: i,
           type: 'added',
-          content: `新增工作: ${rightExp.company} - ${rightExp.position}`,
+          leftValue: '',
+          rightValue: JSON.stringify(rightExp),
+          displayText: `工作经历 [${i + 1}]: ${rightExp.company} - ${rightExp.position}`,
         });
       } else if (leftExp && !rightExp) {
         diffs.push({
+          id: `exp-remove-${idCounter++}`,
+          section: 'experience',
+          field: 'remove',
+          index: i,
           type: 'removed',
-          content: `删除工作: ${leftExp.company} - ${leftExp.position}`,
+          leftValue: JSON.stringify(leftExp),
+          rightValue: '',
+          displayText: `工作经历 [${i + 1}]: ${leftExp.company} - ${leftExp.position}`,
         });
       } else if (leftExp && rightExp) {
         if (leftExp.company !== rightExp.company) {
           diffs.push({
+            id: `exp-company-${idCounter++}`,
+            section: 'experience',
+            field: 'company',
+            index: i,
             type: 'modified',
-            content: `公司: ${rightExp.company} (原: ${leftExp.company})`,
+            leftValue: leftExp.company,
+            rightValue: rightExp.company,
+            displayText: `工作经历 [${i + 1}] 公司: "${rightExp.company}" (原: "${leftExp.company}")`,
           });
         }
         if (leftExp.position !== rightExp.position) {
           diffs.push({
+            id: `exp-position-${idCounter++}`,
+            section: 'experience',
+            field: 'position',
+            index: i,
             type: 'modified',
-            content: `职位: ${rightExp.position} (原: ${leftExp.position})`,
+            leftValue: leftExp.position,
+            rightValue: rightExp.position,
+            displayText: `工作经历 [${i + 1}] 职位: "${rightExp.position}" (原: "${leftExp.position}")`,
           });
         }
         if (leftExp.description !== rightExp.description) {
           diffs.push({
+            id: `exp-desc-${idCounter++}`,
+            section: 'experience',
+            field: 'description',
+            index: i,
             type: 'modified',
-            content: `工作描述: ${rightExp.description}`,
+            leftValue: leftExp.description,
+            rightValue: rightExp.description,
+            displayText: `工作经历 [${i + 1}] 描述已修改`,
           });
         }
       }
     }
     
-    const leftProjCount = leftVersion.sections.projects.length;
-    const rightProjCount = rightVersion.sections.projects.length;
+    const maxProj = Math.max(
+      leftVersion.sections.projects.length,
+      rightVersion.sections.projects.length
+    );
     
-    if (leftProjCount !== rightProjCount) {
-      diffs.push({
-        type: rightProjCount > leftProjCount ? 'added' : 'removed',
-        content: `项目经历: ${rightProjCount > leftProjCount ? '新增' : '删除'} ${Math.abs(rightProjCount - leftProjCount)} 个项目`,
-      });
-    }
-    
-    const maxProj = Math.max(leftProjCount, rightProjCount);
     for (let i = 0; i < maxProj; i++) {
       const leftProj = leftVersion.sections.projects[i];
       const rightProj = rightVersion.sections.projects[i];
       
       if (!leftProj && rightProj) {
         diffs.push({
+          id: `proj-add-${idCounter++}`,
+          section: 'project',
+          field: 'add',
+          index: i,
           type: 'added',
-          content: `新增项目: ${rightProj.name}`,
+          leftValue: '',
+          rightValue: JSON.stringify(rightProj),
+          displayText: `项目经历 [${i + 1}]: ${rightProj.name} - ${rightProj.role}`,
         });
       } else if (leftProj && !rightProj) {
         diffs.push({
+          id: `proj-remove-${idCounter++}`,
+          section: 'project',
+          field: 'remove',
+          index: i,
           type: 'removed',
-          content: `删除项目: ${leftProj.name}`,
+          leftValue: JSON.stringify(leftProj),
+          rightValue: '',
+          displayText: `项目经历 [${i + 1}]: ${leftProj.name} - ${leftProj.role}`,
         });
       } else if (leftProj && rightProj) {
         if (leftProj.name !== rightProj.name) {
           diffs.push({
+            id: `proj-name-${idCounter++}`,
+            section: 'project',
+            field: 'name',
+            index: i,
             type: 'modified',
-            content: `项目名: ${rightProj.name} (原: ${leftProj.name})`,
+            leftValue: leftProj.name,
+            rightValue: rightProj.name,
+            displayText: `项目经历 [${i + 1}] 名称: "${rightProj.name}" (原: "${leftProj.name}")`,
           });
         }
         if (leftProj.description !== rightProj.description) {
           diffs.push({
+            id: `proj-desc-${idCounter++}`,
+            section: 'project',
+            field: 'description',
+            index: i,
             type: 'modified',
-            content: `项目描述: ${rightProj.description}`,
+            leftValue: leftProj.description,
+            rightValue: rightProj.description,
+            displayText: `项目经历 [${i + 1}] 描述已修改`,
           });
         }
       }
@@ -158,12 +287,18 @@ export default function ComparePage() {
     
     if (leftSkillCount !== rightSkillCount) {
       diffs.push({
-        type: rightSkillCount > leftSkillCount ? 'added' : 'removed',
-        content: `技能: ${rightSkillCount > leftSkillCount ? '新增' : '删除'} ${Math.abs(rightSkillCount - leftSkillCount)} 项技能`,
+        id: `skill-count-${idCounter++}`,
+        section: 'skill',
+        field: 'count',
+        index: -1,
+        type: 'modified',
+        leftValue: leftSkillCount.toString(),
+        rightValue: rightSkillCount.toString(),
+        displayText: `技能数量: ${rightSkillCount} (原: ${leftSkillCount})`,
       });
     }
     
-    return diffs;
+    return diffs.filter(d => d.type !== 'unchanged');
   };
   
   const diffs = leftVersion && rightVersion ? generateDiffs() : [];
@@ -172,7 +307,87 @@ export default function ComparePage() {
     added: diffs.filter(d => d.type === 'added').length,
     removed: diffs.filter(d => d.type === 'removed').length,
     modified: diffs.filter(d => d.type === 'modified').length,
-    unchanged: diffs.filter(d => d.type === 'unchanged').length,
+  };
+  
+  const handleToggleDiff = (id: string) => {
+    const newSelected = new Set(selectedDiffs);
+    if (newSelected.has(id)) {
+      newSelected.delete(id);
+    } else {
+      newSelected.add(id);
+    }
+    setSelectedDiffs(newSelected);
+  };
+  
+  const handleApplySelected = () => {
+    if (!rightVersion || selectedDiffs.size === 0) {
+      alert('请先选择要应用的修改');
+      return;
+    }
+    
+    const mergedResume = JSON.parse(JSON.stringify(leftVersion)) as Resume;
+    
+    selectedDiffs.forEach(id => {
+      const diff = diffs.find(d => d.id === id);
+      if (!diff) return;
+      
+      switch (diff.section) {
+        case 'basic':
+          if (diff.field === 'name') {
+            mergedResume.sections.basic.name = diff.rightValue;
+          } else if (diff.field === 'email') {
+            mergedResume.sections.basic.email = diff.rightValue;
+          } else if (diff.field === 'summary') {
+            mergedResume.sections.basic.summary = diff.rightValue;
+          }
+          break;
+          
+        case 'education':
+          if (diff.field === 'add') {
+            mergedResume.sections.education.push(JSON.parse(diff.rightValue));
+          } else if (diff.field === 'remove') {
+            mergedResume.sections.education.splice(diff.index, 1);
+          } else if (diff.field === 'school') {
+            mergedResume.sections.education[diff.index].school = diff.rightValue;
+          } else if (diff.field === 'degree') {
+            mergedResume.sections.education[diff.index].degree = diff.rightValue;
+          }
+          break;
+          
+        case 'experience':
+          if (diff.field === 'add') {
+            mergedResume.sections.experience.push(JSON.parse(diff.rightValue));
+          } else if (diff.field === 'remove') {
+            mergedResume.sections.experience.splice(diff.index, 1);
+          } else if (diff.field === 'company') {
+            mergedResume.sections.experience[diff.index].company = diff.rightValue;
+          } else if (diff.field === 'position') {
+            mergedResume.sections.experience[diff.index].position = diff.rightValue;
+          } else if (diff.field === 'description') {
+            mergedResume.sections.experience[diff.index].description = diff.rightValue;
+          }
+          break;
+          
+        case 'project':
+          if (diff.field === 'add') {
+            mergedResume.sections.projects.push(JSON.parse(diff.rightValue));
+          } else if (diff.field === 'remove') {
+            mergedResume.sections.projects.splice(diff.index, 1);
+          } else if (diff.field === 'name') {
+            mergedResume.sections.projects[diff.index].name = diff.rightValue;
+          } else if (diff.field === 'description') {
+            mergedResume.sections.projects[diff.index].description = diff.rightValue;
+          }
+          break;
+      }
+    });
+    
+    mergedResume.updatedAt = new Date();
+    
+    setCurrentResume(mergedResume);
+    
+    alert(`已成功应用 ${selectedDiffs.size} 项修改到当前版本！`);
+    navigate('/edit');
   };
   
   const handleApplyAll = () => {
@@ -180,51 +395,7 @@ export default function ComparePage() {
     
     setCurrentResume({ ...rightVersion, updatedAt: new Date() });
     
-    const newAppliedCount = appliedChanges.size + diffs.filter(d => d.type !== 'unchanged').length;
-    setAppliedCount(newAppliedCount);
-    
-    alert(`已应用所有优化！共 ${newAppliedCount} 项修改已同步到当前版本。`);
-    navigate('/edit');
-  };
-  
-  const handleApplySingle = (index: number) => {
-    const newApplied = new Set(appliedChanges);
-    newApplied.add(index);
-    setAppliedChanges(newApplied);
-    setAppliedCount(newApplied.size);
-  };
-  
-  const handleIgnoreSingle = (index: number) => {
-    const newApplied = new Set(appliedChanges);
-    newApplied.delete(index);
-    setAppliedChanges(newApplied);
-    setAppliedCount(newApplied.size);
-  };
-  
-  const handleApplySelected = () => {
-    if (!rightVersion || appliedChanges.size === 0) {
-      alert('请先选择要应用的修改');
-      return;
-    }
-    
-    const mergedResume = { ...currentResume! };
-    
-    appliedChanges.forEach(idx => {
-      const diff = diffs[idx];
-      if (!diff) return;
-      
-      if (diff.content.startsWith('姓名:')) {
-        mergedResume.sections.basic.name = diff.content.replace('姓名: ', '');
-      } else if (diff.content.startsWith('邮箱:')) {
-        mergedResume.sections.basic.email = diff.content.replace('邮箱: ', '');
-      } else if (diff.content.startsWith('个人简介:')) {
-        mergedResume.sections.basic.summary = diff.content.replace('个人简介: ', '');
-      }
-    });
-    
-    setCurrentResume({ ...mergedResume, updatedAt: new Date() });
-    
-    alert(`已应用 ${appliedChanges.size} 项修改到当前版本！`);
+    alert('已应用所有优化到当前版本！');
     navigate('/edit');
   };
   
@@ -240,10 +411,10 @@ export default function ComparePage() {
             <ArrowLeft className="w-4 h-4 mr-2" />
             返回编辑
           </Button>
-          {diffs.length > 0 && appliedChanges.size > 0 && (
+          {diffs.length > 0 && selectedDiffs.size > 0 && (
             <Button variant="primary" onClick={handleApplySelected}>
               <Check className="w-4 h-4 mr-2" />
-              应用选中的修改 ({appliedChanges.size})
+              应用选中的修改 ({selectedDiffs.size})
             </Button>
           )}
         </div>
@@ -251,7 +422,7 @@ export default function ComparePage() {
       
       <div className="grid md:grid-cols-2 gap-4 mb-6">
         <Card>
-          <h3 className="text-lg font-semibold mb-4">选择基准版本（将应用改动到）</h3>
+          <h3 className="text-lg font-semibold mb-4">基准版本（将应用改动到）</h3>
           <div className="space-y-2">
             {currentResume && (
               <div
@@ -298,7 +469,7 @@ export default function ComparePage() {
         </Card>
         
         <Card>
-          <h3 className="text-lg font-semibold mb-4">选择对比版本（改动来源）</h3>
+          <h3 className="text-lg font-semibold mb-4">对比版本（改动来源）</h3>
           <div className="space-y-2">
             {currentResume && (
               <div
@@ -347,7 +518,7 @@ export default function ComparePage() {
       
       {leftVersion && rightVersion && (
         <>
-          <div className="grid md:grid-cols-4 gap-4 mb-6">
+          <div className="grid md:grid-cols-3 gap-4 mb-6">
             <Card>
               <div className="text-center">
                 <div className="text-3xl font-bold text-green-600">{stats.added}</div>
@@ -366,12 +537,6 @@ export default function ComparePage() {
                 <div className="text-sm text-gray-600 mt-1">修改内容</div>
               </div>
             </Card>
-            <Card>
-              <div className="text-center">
-                <div className="text-3xl font-bold text-blue-600">{appliedCount}</div>
-                <div className="text-sm text-gray-600 mt-1">已选修改</div>
-              </div>
-            </Card>
           </div>
           
           <Card>
@@ -383,44 +548,39 @@ export default function ComparePage() {
             </div>
             
             <div className="space-y-2 max-h-96 overflow-y-auto">
-              {diffs.map((diff, index) => (
+              {diffs.map((diff) => (
                 <div
-                  key={index}
+                  key={diff.id}
                   className={clsx(
-                    'p-3 rounded-lg flex items-start gap-3',
+                    'p-3 rounded-lg flex items-start gap-3 cursor-pointer transition-all',
                     diff.type === 'added' && 'bg-green-50 border border-green-200',
                     diff.type === 'removed' && 'bg-red-50 border border-red-200',
-                    diff.type === 'modified' && 'bg-yellow-50 border border-yellow-200'
+                    diff.type === 'modified' && 'bg-yellow-50 border border-yellow-200',
+                    selectedDiffs.has(diff.id) && 'ring-2 ring-blue-500'
                   )}
+                  onClick={() => handleToggleDiff(diff.id)}
                 >
-                  <div className="flex-shrink-0">
+                  <div className="flex-shrink-0 mt-1">
                     {diff.type === 'added' && <span className="text-green-600 font-bold text-lg">+</span>}
                     {diff.type === 'removed' && <span className="text-red-600 font-bold text-lg">-</span>}
                     {diff.type === 'modified' && <span className="text-yellow-600 font-bold text-lg">~</span>}
                   </div>
                   <div className="flex-1">
-                    <div className="text-sm">{diff.content}</div>
+                    <div className="text-sm">{diff.displayText}</div>
+                    <div className="text-xs text-gray-500 mt-1">
+                      {diff.section === 'basic' && '基本信息'}
+                      {diff.section === 'education' && '教育背景'}
+                      {diff.section === 'experience' && '工作经历'}
+                      {diff.section === 'project' && '项目经历'}
+                      {diff.section === 'skill' && '技能'}
+                    </div>
                   </div>
-                  <div className="flex gap-2">
-                    <button
-                      onClick={() => handleApplySingle(index)}
-                      className={clsx(
-                        'p-1.5 rounded transition-colors',
-                        appliedChanges.has(index)
-                          ? 'bg-green-600 text-white'
-                          : 'bg-white hover:bg-green-50 text-green-600 border border-green-300'
-                      )}
-                      title="选中此修改"
-                    >
-                      <Check className="w-4 h-4" />
-                    </button>
-                    <button
-                      onClick={() => handleIgnoreSingle(index)}
-                      className="p-1.5 bg-white hover:bg-red-50 text-red-600 border border-red-300 rounded transition-colors"
-                      title="忽略此修改"
-                    >
-                      <X className="w-4 h-4" />
-                    </button>
+                  <div className="flex-shrink-0">
+                    {selectedDiffs.has(diff.id) ? (
+                      <Check className="w-5 h-5 text-blue-600" />
+                    ) : (
+                      <div className="w-5 h-5 border-2 border-gray-300 rounded" />
+                    )}
                   </div>
                 </div>
               ))}

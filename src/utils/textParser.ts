@@ -37,187 +37,258 @@ function parseDateRange(text: string): { startDate: string; endDate: string } {
   return result;
 }
 
-function isSkillSection(line: string): boolean {
-  const techSkills = ['JavaScript', 'TypeScript', 'Python', 'Java', 'Go', 'React', 'Vue', 'Node.js', 'SQL', 'MongoDB', 'Git', 'Docker', 'AWS', 'CSS', 'HTML', 'Spring', 'MySQL', 'Redis', 'Linux', 'Kubernetes', '微服务', '前端', '后端', '全栈'];
-  return techSkills.some(skill => line.includes(skill));
+function isExperienceHeader(line: string): boolean {
+  const patterns = [
+    /公司|企业|Co\.|Ltd\.|Inc\./,
+    /\d{4}[-/年]\d{1,2}/,
+    /开始|结束/,
+  ];
+  return patterns.some(p => p.test(line));
 }
 
-function parseEducation(lines: string[], startIndex: number): { education: Education; endIndex: number } {
-  const education: Education = {
-    school: '',
-    degree: '',
-    major: '',
-    startDate: '',
-    endDate: '',
-  };
+function isProjectHeader(line: string): boolean {
+  const patterns = [
+    /项目/,
+    /\d{4}[-/年]\d{1,2}/,
+    /系统|平台|应用|工具/,
+  ];
+  return patterns.some(p => p.test(line));
+}
+
+function parseExperienceBlocks(text: string): Experience[] {
+  const experiences: Experience[] = [];
+  const lines = text.split('\n').filter(l => l.trim());
   
-  let i = startIndex;
+  let currentExp: Experience | null = null;
+  let buffer: string[] = [];
   
-  while (i < lines.length) {
+  for (let i = 0; i < lines.length; i++) {
     const line = lines[i].trim();
     
-    if (SECTION_PATTERNS.experience.test(line) || SECTION_PATTERNS.project.test(line) || SECTION_PATTERNS.skill.test(line)) {
-      break;
+    if (!line) continue;
+    
+    const isHeader = isExperienceHeader(line);
+    const hasDate = isDateLine(line);
+    const isCompanyName = /公司|企业|Co\.|Ltd\.|Inc\./.test(line) && line.length < 50;
+    
+    if (isCompanyName || (hasDate && buffer.length > 2)) {
+      if (currentExp) {
+        experiences.push(currentExp);
+      }
+      
+      currentExp = {
+        company: isCompanyName ? line : '',
+        position: '',
+        startDate: '',
+        endDate: '',
+        description: '',
+        highlights: [],
+      };
+      
+      buffer = [];
     }
     
-    if (SCHOOL_PATTERNS.test(line) && !education.school) {
-      education.school = line;
-    } else if (DEGREE_PATTERNS.test(line) && !education.degree) {
-      education.degree = line;
-      const majorMatch = line.match(/[\u4e00-\u9fa5]+\s*专业/);
-      if (majorMatch) {
-        education.major = majorMatch[0];
-      } else if (i + 1 < lines.length) {
-        const nextLine = lines[i + 1].trim();
-        if (!SECTION_PATTERNS.experience.test(nextLine) && !SECTION_PATTERNS.project.test(nextLine)) {
-          education.major = nextLine;
-          i++;
+    if (currentExp) {
+      if (hasDate && !currentExp.startDate) {
+        const dates = parseDateRange(line);
+        currentExp.startDate = dates.startDate;
+        currentExp.endDate = dates.endDate;
+      } else if (!isCompanyName && line.length > 5) {
+        if (!currentExp.position && !hasDate) {
+          currentExp.position = line;
+        } else {
+          currentExp.description += line + ' ';
+          
+          if (line.startsWith('•') || line.startsWith('-') || line.startsWith('·') || /\d+%|\d+倍|\d+个/.test(line)) {
+            currentExp.highlights.push(line.replace(/^[•\-\·]\s*/, ''));
+          }
         }
       }
-    } else if (isDateLine(line)) {
-      const dates = parseDateRange(line);
-      if (!education.startDate) {
-        education.startDate = dates.startDate;
-        education.endDate = dates.endDate;
-      }
-    } else if (line.length > 3 && !education.school) {
-      education.school = line;
     }
-    
-    i++;
   }
   
-  return { education, endIndex: i - 1 };
+  if (currentExp && (currentExp.company || currentExp.description)) {
+    experiences.push(currentExp);
+  }
+  
+  if (experiences.length === 0 && text.trim()) {
+    experiences.push({
+      company: '',
+      position: '',
+      startDate: '',
+      endDate: '',
+      description: text.trim(),
+      highlights: [],
+    });
+  }
+  
+  return experiences;
 }
 
-function parseExperience(lines: string[], startIndex: number): { experience: Experience; endIndex: number } {
-  const experience: Experience = {
-    company: '',
-    position: '',
-    startDate: '',
-    endDate: '',
-    description: '',
-    highlights: [],
-  };
+function parseProjectBlocks(text: string): Project[] {
+  const projects: Project[] = [];
+  const lines = text.split('\n').filter(l => l.trim());
   
-  let i = startIndex;
+  let currentProj: Project | null = null;
+  let buffer: string[] = [];
   
-  while (i < lines.length) {
+  for (let i = 0; i < lines.length; i++) {
     const line = lines[i].trim();
     
-    if (SECTION_PATTERNS.project.test(line) || SECTION_PATTERNS.skill.test(line)) {
-      break;
-    }
+    if (!line) continue;
     
-    if (line.includes('公司') || line.includes('企业') || line.includes('Co.,') || /^[A-Z]/.test(line)) {
-      if (!experience.company) {
-        experience.company = line;
-      } else if (experience.company && !experience.position) {
-        experience.position = line;
+    const isHeader = isProjectHeader(line);
+    const hasDate = isDateLine(line);
+    const isProjectName = /项目/.test(line) || (line.length < 40 && line.length > 2);
+    
+    if (isProjectName || (hasDate && buffer.length > 2)) {
+      if (currentProj) {
+        projects.push(currentProj);
       }
-    } else if (isDateLine(line)) {
-      const dates = parseDateRange(line);
-      if (!experience.startDate) {
-        experience.startDate = dates.startDate;
-        experience.endDate = dates.endDate;
-      }
-    } else if (line.length > 5) {
-      experience.description += line + ' ';
       
-      if (line.startsWith('•') || line.startsWith('-') || line.startsWith('·') || /\d+/.test(line)) {
-        experience.highlights.push(line.replace(/^[•\-\·]\s*/, ''));
-      }
+      currentProj = {
+        name: line.replace(/项目名称[：:]\s*/, ''),
+        role: '',
+        startDate: '',
+        endDate: '',
+        description: '',
+        technologies: [],
+        metrics: [],
+      };
+      
+      buffer = [];
     }
     
-    i++;
+    if (currentProj) {
+      if (hasDate && !currentProj.startDate) {
+        const dates = parseDateRange(line);
+        currentProj.startDate = dates.startDate;
+        currentProj.endDate = dates.endDate;
+      } else if (/职责|角色|负责/.test(line) && !currentProj.role) {
+        currentProj.role = line;
+      } else if (/技术栈|技术|框架/.test(line)) {
+        currentProj.technologies = line.split(/[,，、;:]/).map(s => s.trim()).filter(Boolean);
+      } else if (line.length > 5) {
+        currentProj.description += line + ' ';
+        
+        const metricMatch = line.match(/\d+%|\d+倍|\d+个|\d+人|\d+万|\d+天/);
+        if (metricMatch) {
+          currentProj.metrics.push(line);
+        }
+      }
+    }
   }
   
-  return { experience, endIndex: i - 1 };
-}
-
-function parseProject(lines: string[], startIndex: number): { project: Project; endIndex: number } {
-  const project: Project = {
-    name: '',
-    role: '',
-    startDate: '',
-    endDate: '',
-    description: '',
-    technologies: [],
-    metrics: [],
-  };
-  
-  let i = startIndex;
-  
-  while (i < lines.length) {
-    const line = lines[i].trim();
-    
-    if (SECTION_PATTERNS.skill.test(line)) {
-      break;
-    }
-    
-    if (line.includes('项目') || line.includes('项目名称')) {
-      if (!project.name) {
-        project.name = line.replace(/项目名称[：:]\s*/, '');
-      }
-    } else if (line.includes('职责') || line.includes('角色') || /前端|后端|全栈|负责人|组长|成员/.test(line)) {
-      if (!project.role) {
-        project.role = line;
-      }
-    } else if (isDateLine(line)) {
-      const dates = parseDateRange(line);
-      if (!project.startDate) {
-        project.startDate = dates.startDate;
-        project.endDate = dates.endDate;
-      }
-    } else if (/技术栈|技术|框架/.test(line)) {
-      project.technologies = line.split(/[,，、;:]/).map(s => s.trim()).filter(Boolean);
-    } else if (line.length > 5) {
-      project.description += line + ' ';
-      
-      const metricMatch = line.match(/\d+%|\d+倍|\d+个|\d+人|\d+万|\d+天/);
-      if (metricMatch) {
-        project.metrics.push(line);
-      }
-    }
-    
-    i++;
+  if (currentProj && (currentProj.name || currentProj.description)) {
+    projects.push(currentProj);
   }
   
-  return { project, endIndex: i - 1 };
+  if (projects.length === 0 && text.trim()) {
+    projects.push({
+      name: '',
+      role: '',
+      startDate: '',
+      endDate: '',
+      description: text.trim(),
+      technologies: [],
+      metrics: [],
+    });
+  }
+  
+  return projects;
 }
 
-function parseSkills(lines: string[], startIndex: number): { skills: Skill[]; endIndex: number } {
+function parseEducation(text: string): Education[] {
+  const educations: Education[] = [];
+  const lines = text.split('\n').filter(l => l.trim());
+  
+  let currentEdu: Education | null = null;
+  
+  for (const line of lines) {
+    const trimmed = line.trim();
+    
+    if (!trimmed) continue;
+    
+    const hasDate = isDateLine(trimmed);
+    const isSchool = SCHOOL_PATTERNS.test(trimmed);
+    
+    if (isSchool && (!currentEdu || currentEdu.school)) {
+      if (currentEdu) {
+        educations.push(currentEdu);
+      }
+      
+      currentEdu = {
+        school: trimmed,
+        degree: '',
+        major: '',
+        startDate: '',
+        endDate: '',
+      };
+    } else if (currentEdu) {
+      if (DEGREE_PATTERNS.test(trimmed)) {
+        if (!currentEdu.degree) {
+          currentEdu.degree = trimmed;
+          const majorMatch = trimmed.match(/[\u4e00-\u9fa5]+\s*专业/);
+          if (majorMatch) {
+            currentEdu.major = majorMatch[0];
+          }
+        }
+      } else if (hasDate && !currentEdu.startDate) {
+        const dates = parseDateRange(trimmed);
+        currentEdu.startDate = dates.startDate;
+        currentEdu.endDate = dates.endDate;
+      } else if (trimmed.length > 2 && !currentEdu.degree) {
+        currentEdu.degree = trimmed;
+      }
+    } else if (isSchool) {
+      currentEdu = {
+        school: trimmed,
+        degree: '',
+        major: '',
+        startDate: '',
+        endDate: '',
+      };
+    }
+  }
+  
+  if (currentEdu && currentEdu.school) {
+    educations.push(currentEdu);
+  }
+  
+  return educations;
+}
+
+function parseSkills(text: string): Skill[] {
   const skills: Skill[] = [];
+  const lines = text.split('\n').filter(l => l.trim());
   
-  let i = startIndex;
-  
-  while (i < lines.length) {
-    const line = lines[i].trim();
+  for (const line of lines) {
+    const trimmed = line.trim();
     
-    if (line.length > 0 && (isSkillSection(line) || /熟练|精通|掌握|了解/.test(line))) {
-      const techs = line.split(/[,，、;|:：\n]/).map(s => s.trim()).filter(s => s.length > 0);
+    if (!trimmed || trimmed.length < 2) continue;
+    
+    const parts = trimmed.split(/[,，、;|:：\n]/).filter(s => s.trim());
+    
+    for (const part of parts) {
+      const skillName = part.replace(/精通|熟练|掌握|了解/g, '').trim();
       
-      techs.forEach(tech => {
+      if (skillName.length > 0 && skillName.length < 30) {
         let level: '精通' | '熟练' | '了解' = '了解';
-        if (/精通/.test(tech)) level = '精通';
-        else if (/熟练/.test(tech)) level = '熟练';
+        if (/精通/.test(part)) level = '精通';
+        else if (/熟练/.test(part)) level = '熟练';
         
-        tech = tech.replace(/精通|熟练|掌握|了解/g, '').trim();
+        const isLanguage = /英语|日语|韩语|法语|德语|CET|TOEFL|IELTS/.test(skillName);
         
-        if (tech.length > 0) {
-          skills.push({
-            name: tech,
-            level,
-            category: /英语|日语|韩语|语言/.test(tech) ? '语言' : '技术',
-          });
-        }
-      });
+        skills.push({
+          name: skillName,
+          level,
+          category: isLanguage ? '语言' : '技术',
+        });
+      }
     }
-    
-    i++;
   }
   
-  return { skills, endIndex: i - 1 };
+  return skills;
 }
 
 export function parseTextToResume(text: string): Resume {
@@ -242,17 +313,18 @@ export function parseTextToResume(text: string): Resume {
     },
   };
   
-  const lines = text.split('\n').filter(line => line.trim());
-  
-  let currentSection: 'basic' | 'education' | 'experience' | 'project' | 'skill' | null = null;
-  let summaryLines: string[] = [];
+  const lines = text.split('\n');
+  let currentSection: string | null = null;
+  let sectionContent: string[] = [];
+  let basicContent: string[] = [];
+  let summaryContent: string[] = [];
+  let inSummary = false;
   
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i].trim();
+    const lowerLine = line.toLowerCase();
     
-    if (!line) continue;
-    
-    if (i < 5) {
+    if (i < 3) {
       const emailMatch = line.match(/[\w.-]+@[\w.-]+\.\w+/);
       if (emailMatch && !resume.sections.basic.email) {
         resume.sections.basic.email = emailMatch[0];
@@ -272,110 +344,99 @@ export function parseTextToResume(text: string): Resume {
     }
     
     if (SECTION_PATTERNS.summary.test(line)) {
-      currentSection = 'basic';
+      if (sectionContent.length > 0 && currentSection) {
+        saveSection(resume, currentSection, sectionContent);
+      }
+      inSummary = true;
+      currentSection = null;
+      sectionContent = [];
       continue;
     }
     
     if (SECTION_PATTERNS.education.test(line)) {
-      if (summaryLines.length > 0) {
-        resume.sections.basic.summary = summaryLines.join(' ');
-        summaryLines = [];
+      if (sectionContent.length > 0 && currentSection) {
+        saveSection(resume, currentSection, sectionContent);
       }
+      inSummary = false;
       currentSection = 'education';
-      const { education, endIndex } = parseEducation(lines, i + 1);
-      if (education.school || education.degree) {
-        resume.sections.education.push(education);
-      }
-      i = endIndex;
+      sectionContent = [];
       continue;
     }
     
     if (SECTION_PATTERNS.experience.test(line)) {
-      if (summaryLines.length > 0) {
-        resume.sections.basic.summary = summaryLines.join(' ');
-        summaryLines = [];
+      if (sectionContent.length > 0 && currentSection) {
+        saveSection(resume, currentSection, sectionContent);
       }
+      inSummary = false;
       currentSection = 'experience';
-      const { experience, endIndex } = parseExperience(lines, i + 1);
-      if (experience.company || experience.description) {
-        resume.sections.experience.push(experience);
-      }
-      i = endIndex;
+      sectionContent = [];
       continue;
     }
     
     if (SECTION_PATTERNS.project.test(line)) {
-      if (summaryLines.length > 0) {
-        resume.sections.basic.summary = summaryLines.join(' ');
-        summaryLines = [];
+      if (sectionContent.length > 0 && currentSection) {
+        saveSection(resume, currentSection, sectionContent);
       }
+      inSummary = false;
       currentSection = 'project';
-      const { project, endIndex } = parseProject(lines, i + 1);
-      if (project.name || project.description) {
-        resume.sections.projects.push(project);
-      }
-      i = endIndex;
+      sectionContent = [];
       continue;
     }
     
     if (SECTION_PATTERNS.skill.test(line)) {
-      if (summaryLines.length > 0) {
-        resume.sections.basic.summary = summaryLines.join(' ');
-        summaryLines = [];
+      if (sectionContent.length > 0 && currentSection) {
+        saveSection(resume, currentSection, sectionContent);
       }
+      inSummary = false;
       currentSection = 'skill';
-      const { skills, endIndex } = parseSkills(lines, i + 1);
-      resume.sections.skills.push(...skills);
-      i = endIndex;
+      sectionContent = [];
       continue;
     }
     
-    if (currentSection === 'basic' && line.length > 10) {
-      summaryLines.push(line);
+    if (inSummary) {
+      summaryContent.push(line);
+    } else if (currentSection) {
+      sectionContent.push(line);
+    } else {
+      basicContent.push(line);
     }
   }
   
-  if (summaryLines.length > 0 && !resume.sections.basic.summary) {
-    resume.sections.basic.summary = summaryLines.join(' ');
+  if (sectionContent.length > 0 && currentSection) {
+    saveSection(resume, currentSection, sectionContent);
   }
   
-  if (resume.sections.education.length === 0) {
-    for (let i = 0; i < lines.length; i++) {
-      const line = lines[i];
-      if (SCHOOL_PATTERNS.test(line) && !resume.sections.education.some(e => e.school === line)) {
-        const { education } = parseEducation(lines, i);
-        if (education.school) {
-          resume.sections.education.push(education);
-        }
-      }
-    }
+  if (summaryContent.length > 0) {
+    resume.sections.basic.summary = summaryContent.join(' ').replace(/\s+/g, ' ');
   }
   
-  if (resume.sections.experience.length === 0) {
-    for (let i = 0; i < lines.length; i++) {
-      const line = lines[i];
-      if (line.includes('公司') && line.length < 30) {
-        const { experience } = parseExperience(lines, i);
-        if (experience.company && !resume.sections.experience.some(e => e.company === experience.company)) {
-          resume.sections.experience.push(experience);
-        }
-      }
-    }
-  }
-  
-  if (resume.sections.projects.length === 0) {
-    for (let i = 0; i < lines.length; i++) {
-      const line = lines[i];
-      if (line.includes('项目') && line.length < 30) {
-        const { project } = parseProject(lines, i);
-        if (project.name && !resume.sections.projects.some(p => p.name === project.name)) {
-          resume.sections.projects.push(project);
-        }
-      }
+  if (basicContent.length > 0 && !resume.sections.basic.summary) {
+    const summary = basicContent.join(' ').replace(/\s+/g, ' ');
+    if (summary.length > 10) {
+      resume.sections.basic.summary = summary;
     }
   }
   
   return resume;
+}
+
+function saveSection(resume: Resume, section: string, content: string[]): void {
+  const text = content.join('\n');
+  
+  switch (section) {
+    case 'education':
+      resume.sections.education = parseEducation(text);
+      break;
+    case 'experience':
+      resume.sections.experience = parseExperienceBlocks(text);
+      break;
+    case 'project':
+      resume.sections.projects = parseProjectBlocks(text);
+      break;
+    case 'skill':
+      resume.sections.skills = parseSkills(text);
+      break;
+  }
 }
 
 export function resumeToHtml(resume: Resume): string {

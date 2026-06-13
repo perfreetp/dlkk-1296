@@ -63,15 +63,24 @@ export default function SettingsPage() {
         return;
       }
       
-      useResumeStore.setState({
-        currentResume: data.resumes[0] || null,
-        versions: data.resumes.map((resume, index) => ({
-          id: crypto.randomUUID(),
-          resumeId: resume.id || crypto.randomUUID(),
-          name: resume.name || `版本 ${index + 1}`,
+      const restoredVersions: ResumeVersion[] = data.resumes.map((resume, index) => ({
+        id: resume.id || crypto.randomUUID(),
+        resumeId: resume.id || crypto.randomUUID(),
+        name: resume.name || `版本 ${index + 1}`,
+        createdAt: resume.createdAt ? new Date(resume.createdAt) : new Date(),
+        resume: {
+          ...resume,
+          id: resume.id || crypto.randomUUID(),
           createdAt: resume.createdAt ? new Date(resume.createdAt) : new Date(),
-          resume: resume,
-        })),
+          updatedAt: resume.updatedAt ? new Date(resume.updatedAt) : new Date(),
+        },
+      }));
+      
+      const defaultResumeId = restoredVersions.find(v => v.resume.isDefault)?.id || restoredVersions[0]?.id;
+      
+      useResumeStore.setState({
+        currentResume: restoredVersions[0]?.resume || null,
+        versions: restoredVersions,
         isAnalyzing: false,
       });
       
@@ -99,6 +108,8 @@ export default function SettingsPage() {
       } else {
         useMaterialStore.setState({ materials: [] });
       }
+      
+      useSettingsStore.getState().setDefaultResume(defaultResumeId || null);
       
       alert(`数据导入成功！\n已恢复 ${resumeCount} 份简历、${deliveryCount} 条投递记录、${materialCount} 个素材。\n\n页面将刷新以显示新数据。`);
       
@@ -172,7 +183,7 @@ export default function SettingsPage() {
                     <div>
                       <div className="font-medium text-gray-900">{version.name}</div>
                       <div className="text-sm text-gray-500">
-                        创建时间：{new Date(version.createdAt).toLocaleDateString('zh-CN')}
+                        创建时间：{new Date(version.createdAt).toLocaleString('zh-CN')}
                       </div>
                       <div className="text-xs text-gray-400 mt-1">
                         教育 {version.resume.sections.education.length} 条 |
