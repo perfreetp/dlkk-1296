@@ -62,8 +62,11 @@ export default function HomePage() {
     
     try {
       const resume = parseTextToResume(text);
-      setParsedResume(resume);
+      importResume(resume);
+      setParsedResume(null);
+      setText('');
       setError('');
+      navigate('/edit');
     } catch (err) {
       setError('简历解析失败，请检查格式');
       setParsedResume(null);
@@ -77,6 +80,7 @@ export default function HomePage() {
     }
     
     importResume(parsedResume);
+    setParsedResume(null);
     navigate('/edit');
   };
   

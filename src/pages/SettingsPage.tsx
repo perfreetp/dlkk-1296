@@ -63,10 +63,10 @@ export default function SettingsPage() {
         return;
       }
       
-      const restoredVersions: ResumeVersion[] = data.resumes.map((resume, index) => ({
+      const restoredVersions: ResumeVersion[] = data.resumes.map((resume) => ({
         id: resume.id || crypto.randomUUID(),
         resumeId: resume.id || crypto.randomUUID(),
-        name: resume.name || `版本 ${index + 1}`,
+        name: resume.name || '未命名版本',
         createdAt: resume.createdAt ? new Date(resume.createdAt) : new Date(),
         resume: {
           ...resume,
@@ -79,18 +79,30 @@ export default function SettingsPage() {
       const defaultResumeId = restoredVersions.find(v => v.resume.isDefault)?.id || restoredVersions[0]?.id;
       
       useResumeStore.setState({
-        currentResume: restoredVersions[0]?.resume || null,
+        currentResume: restoredVersions.find(v => v.resume.isDefault)?.resume || restoredVersions[0]?.resume || null,
         versions: restoredVersions,
         isAnalyzing: false,
       });
       
       if (data.deliveries && data.deliveries.length > 0) {
+        const deliveryIdMap = new Map<string, string>();
+        
+        data.resumes.forEach((resume, index) => {
+          if (resume.id) {
+            const originalVersion = restoredVersions.find(v => v.resumeId === resume.id);
+            if (originalVersion) {
+              deliveryIdMap.set(resume.id, originalVersion.id);
+            }
+          }
+        });
+        
         useDeliveryStore.setState({
           records: data.deliveries.map(record => ({
             ...record,
             id: record.id || crypto.randomUUID(),
             deliveryDate: record.deliveryDate ? new Date(record.deliveryDate) : new Date(),
             updatedAt: record.updatedAt ? new Date(record.updatedAt) : new Date(),
+            resumeVersionId: deliveryIdMap.get(record.resumeVersionId) || record.resumeVersionId || defaultResumeId || '',
           })),
         });
       } else {

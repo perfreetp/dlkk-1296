@@ -111,7 +111,7 @@ export default function ComparePage() {
           type: 'added',
           leftValue: '',
           rightValue: JSON.stringify(rightEdu),
-          displayText: `教育背景 [${i + 1}]: ${rightEdu.school} - ${rightEdu.degree}`,
+          displayText: `教育背景 [新增 ${i + 1}]: ${rightEdu.school} - ${rightEdu.degree}`,
         });
       } else if (leftEdu && !rightEdu) {
         diffs.push({
@@ -122,7 +122,7 @@ export default function ComparePage() {
           type: 'removed',
           leftValue: JSON.stringify(leftEdu),
           rightValue: '',
-          displayText: `教育背景 [${i + 1}]: ${leftEdu.school} - ${leftEdu.degree}`,
+          displayText: `教育背景 [${i + 1}] 删除: ${leftEdu.school} - ${leftEdu.degree}`,
         });
       } else if (leftEdu && rightEdu) {
         if (leftEdu.school !== rightEdu.school) {
@@ -149,6 +149,42 @@ export default function ComparePage() {
             displayText: `教育背景 [${i + 1}] 学位: "${rightEdu.degree}" (原: "${leftEdu.degree}")`,
           });
         }
+        if (leftEdu.major !== rightEdu.major) {
+          diffs.push({
+            id: `edu-major-${idCounter++}`,
+            section: 'education',
+            field: 'major',
+            index: i,
+            type: 'modified',
+            leftValue: leftEdu.major,
+            rightValue: rightEdu.major,
+            displayText: `教育背景 [${i + 1}] 专业: "${rightEdu.major}" (原: "${leftEdu.major}")`,
+          });
+        }
+        if (leftEdu.startDate !== rightEdu.startDate) {
+          diffs.push({
+            id: `edu-start-${idCounter++}`,
+            section: 'education',
+            field: 'startDate',
+            index: i,
+            type: 'modified',
+            leftValue: leftEdu.startDate,
+            rightValue: rightEdu.startDate,
+            displayText: `教育背景 [${i + 1}] 开始时间: "${rightEdu.startDate}" (原: "${leftEdu.startDate}")`,
+          });
+        }
+        if (leftEdu.endDate !== rightEdu.endDate) {
+          diffs.push({
+            id: `edu-end-${idCounter++}`,
+            section: 'education',
+            field: 'endDate',
+            index: i,
+            type: 'modified',
+            leftValue: leftEdu.endDate,
+            rightValue: rightEdu.endDate,
+            displayText: `教育背景 [${i + 1}] 结束时间: "${rightEdu.endDate}" (原: "${leftEdu.endDate}")`,
+          });
+        }
       }
     }
     
@@ -170,7 +206,7 @@ export default function ComparePage() {
           type: 'added',
           leftValue: '',
           rightValue: JSON.stringify(rightExp),
-          displayText: `工作经历 [${i + 1}]: ${rightExp.company} - ${rightExp.position}`,
+          displayText: `工作经历 [新增 ${i + 1}]: ${rightExp.company} - ${rightExp.position}`,
         });
       } else if (leftExp && !rightExp) {
         diffs.push({
@@ -181,7 +217,7 @@ export default function ComparePage() {
           type: 'removed',
           leftValue: JSON.stringify(leftExp),
           rightValue: '',
-          displayText: `工作经历 [${i + 1}]: ${leftExp.company} - ${leftExp.position}`,
+          displayText: `工作经历 [${i + 1}] 删除: ${leftExp.company} - ${leftExp.position}`,
         });
       } else if (leftExp && rightExp) {
         if (leftExp.company !== rightExp.company) {
@@ -206,6 +242,30 @@ export default function ComparePage() {
             leftValue: leftExp.position,
             rightValue: rightExp.position,
             displayText: `工作经历 [${i + 1}] 职位: "${rightExp.position}" (原: "${leftExp.position}")`,
+          });
+        }
+        if (leftExp.startDate !== rightExp.startDate) {
+          diffs.push({
+            id: `exp-start-${idCounter++}`,
+            section: 'experience',
+            field: 'startDate',
+            index: i,
+            type: 'modified',
+            leftValue: leftExp.startDate,
+            rightValue: rightExp.startDate,
+            displayText: `工作经历 [${i + 1}] 开始时间: "${rightExp.startDate}" (原: "${leftExp.startDate}")`,
+          });
+        }
+        if (leftExp.endDate !== rightExp.endDate) {
+          diffs.push({
+            id: `exp-end-${idCounter++}`,
+            section: 'experience',
+            field: 'endDate',
+            index: i,
+            type: 'modified',
+            leftValue: leftExp.endDate,
+            rightValue: rightExp.endDate,
+            displayText: `工作经历 [${i + 1}] 结束时间: "${rightExp.endDate}" (原: "${leftExp.endDate}")`,
           });
         }
         if (leftExp.description !== rightExp.description) {
@@ -241,7 +301,7 @@ export default function ComparePage() {
           type: 'added',
           leftValue: '',
           rightValue: JSON.stringify(rightProj),
-          displayText: `项目经历 [${i + 1}]: ${rightProj.name} - ${rightProj.role}`,
+          displayText: `项目经历 [新增 ${i + 1}]: ${rightProj.name} - ${rightProj.role}`,
         });
       } else if (leftProj && !rightProj) {
         diffs.push({
@@ -252,7 +312,7 @@ export default function ComparePage() {
           type: 'removed',
           leftValue: JSON.stringify(leftProj),
           rightValue: '',
-          displayText: `项目经历 [${i + 1}]: ${leftProj.name} - ${leftProj.role}`,
+          displayText: `项目经历 [${i + 1}] 删除: ${leftProj.name} - ${leftProj.role}`,
         });
       } else if (leftProj && rightProj) {
         if (leftProj.name !== rightProj.name) {
@@ -265,6 +325,42 @@ export default function ComparePage() {
             leftValue: leftProj.name,
             rightValue: rightProj.name,
             displayText: `项目经历 [${i + 1}] 名称: "${rightProj.name}" (原: "${leftProj.name}")`,
+          });
+        }
+        if (leftProj.role !== rightProj.role) {
+          diffs.push({
+            id: `proj-role-${idCounter++}`,
+            section: 'project',
+            field: 'role',
+            index: i,
+            type: 'modified',
+            leftValue: leftProj.role,
+            rightValue: rightProj.role,
+            displayText: `项目经历 [${i + 1}] 角色: "${rightProj.role}" (原: "${leftProj.role}")`,
+          });
+        }
+        if (leftProj.startDate !== rightProj.startDate) {
+          diffs.push({
+            id: `proj-start-${idCounter++}`,
+            section: 'project',
+            field: 'startDate',
+            index: i,
+            type: 'modified',
+            leftValue: leftProj.startDate,
+            rightValue: rightProj.startDate,
+            displayText: `项目经历 [${i + 1}] 开始时间: "${rightProj.startDate}" (原: "${leftProj.startDate}")`,
+          });
+        }
+        if (leftProj.endDate !== rightProj.endDate) {
+          diffs.push({
+            id: `proj-end-${idCounter++}`,
+            section: 'project',
+            field: 'endDate',
+            index: i,
+            type: 'modified',
+            leftValue: leftProj.endDate,
+            rightValue: rightProj.endDate,
+            displayText: `项目经历 [${i + 1}] 结束时间: "${rightProj.endDate}" (原: "${leftProj.endDate}")`,
           });
         }
         if (leftProj.description !== rightProj.description) {
@@ -282,20 +378,51 @@ export default function ComparePage() {
       }
     }
     
-    const leftSkillCount = leftVersion.sections.skills.length;
-    const rightSkillCount = rightVersion.sections.skills.length;
+    const maxSkill = Math.max(
+      leftVersion.sections.skills.length,
+      rightVersion.sections.skills.length
+    );
     
-    if (leftSkillCount !== rightSkillCount) {
-      diffs.push({
-        id: `skill-count-${idCounter++}`,
-        section: 'skill',
-        field: 'count',
-        index: -1,
-        type: 'modified',
-        leftValue: leftSkillCount.toString(),
-        rightValue: rightSkillCount.toString(),
-        displayText: `技能数量: ${rightSkillCount} (原: ${leftSkillCount})`,
-      });
+    for (let i = 0; i < maxSkill; i++) {
+      const leftSkill = leftVersion.sections.skills[i];
+      const rightSkill = rightVersion.sections.skills[i];
+      
+      if (!leftSkill && rightSkill) {
+        diffs.push({
+          id: `skill-add-${idCounter++}`,
+          section: 'skill',
+          field: 'add',
+          index: i,
+          type: 'added',
+          leftValue: '',
+          rightValue: JSON.stringify(rightSkill),
+          displayText: `技能 [新增 ${i + 1}]: ${rightSkill.name} (${rightSkill.level})`,
+        });
+      } else if (leftSkill && !rightSkill) {
+        diffs.push({
+          id: `skill-remove-${idCounter++}`,
+          section: 'skill',
+          field: 'remove',
+          index: i,
+          type: 'removed',
+          leftValue: JSON.stringify(leftSkill),
+          rightValue: '',
+          displayText: `技能 [${i + 1}] 删除: ${leftSkill.name} (${leftSkill.level})`,
+        });
+      } else if (leftSkill && rightSkill) {
+        if (leftSkill.name !== rightSkill.name || leftSkill.level !== rightSkill.level) {
+          diffs.push({
+            id: `skill-mod-${idCounter++}`,
+            section: 'skill',
+            field: 'modify',
+            index: i,
+            type: 'modified',
+            leftValue: JSON.stringify(leftSkill),
+            rightValue: JSON.stringify(rightSkill),
+            displayText: `技能 [${i + 1}]: "${rightSkill.name} (${rightSkill.level})" (原: "${leftSkill.name} (${leftSkill.level})")`,
+          });
+        }
+      }
     }
     
     return diffs.filter(d => d.type !== 'unchanged');
@@ -351,6 +478,12 @@ export default function ComparePage() {
             mergedResume.sections.education[diff.index].school = diff.rightValue;
           } else if (diff.field === 'degree') {
             mergedResume.sections.education[diff.index].degree = diff.rightValue;
+          } else if (diff.field === 'major') {
+            mergedResume.sections.education[diff.index].major = diff.rightValue;
+          } else if (diff.field === 'startDate') {
+            mergedResume.sections.education[diff.index].startDate = diff.rightValue;
+          } else if (diff.field === 'endDate') {
+            mergedResume.sections.education[diff.index].endDate = diff.rightValue;
           }
           break;
           
@@ -363,6 +496,10 @@ export default function ComparePage() {
             mergedResume.sections.experience[diff.index].company = diff.rightValue;
           } else if (diff.field === 'position') {
             mergedResume.sections.experience[diff.index].position = diff.rightValue;
+          } else if (diff.field === 'startDate') {
+            mergedResume.sections.experience[diff.index].startDate = diff.rightValue;
+          } else if (diff.field === 'endDate') {
+            mergedResume.sections.experience[diff.index].endDate = diff.rightValue;
           } else if (diff.field === 'description') {
             mergedResume.sections.experience[diff.index].description = diff.rightValue;
           }
@@ -375,8 +512,24 @@ export default function ComparePage() {
             mergedResume.sections.projects.splice(diff.index, 1);
           } else if (diff.field === 'name') {
             mergedResume.sections.projects[diff.index].name = diff.rightValue;
+          } else if (diff.field === 'role') {
+            mergedResume.sections.projects[diff.index].role = diff.rightValue;
+          } else if (diff.field === 'startDate') {
+            mergedResume.sections.projects[diff.index].startDate = diff.rightValue;
+          } else if (diff.field === 'endDate') {
+            mergedResume.sections.projects[diff.index].endDate = diff.rightValue;
           } else if (diff.field === 'description') {
             mergedResume.sections.projects[diff.index].description = diff.rightValue;
+          }
+          break;
+          
+        case 'skill':
+          if (diff.field === 'add') {
+            mergedResume.sections.skills.push(JSON.parse(diff.rightValue));
+          } else if (diff.field === 'remove') {
+            mergedResume.sections.skills.splice(diff.index, 1);
+          } else if (diff.field === 'modify') {
+            mergedResume.sections.skills[diff.index] = JSON.parse(diff.rightValue);
           }
           break;
       }

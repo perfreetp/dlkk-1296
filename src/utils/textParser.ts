@@ -40,7 +40,7 @@ function parseDateRange(text: string): { startDate: string; endDate: string } {
 function isExperienceHeader(line: string): boolean {
   const patterns = [
     /公司|企业|Co\.|Ltd\.|Inc\./,
-    /\d{4}[-/年]\d{1,2}/,
+    /\d{4}[-/年.]\d{1,2}/,
     /开始|结束/,
   ];
   return patterns.some(p => p.test(line));
@@ -49,10 +49,16 @@ function isExperienceHeader(line: string): boolean {
 function isProjectHeader(line: string): boolean {
   const patterns = [
     /项目/,
-    /\d{4}[-/年]\d{1,2}/,
+    /\d{4}[-/年.]\d{1,2}/,
     /系统|平台|应用|工具/,
   ];
   return patterns.some(p => p.test(line));
+}
+
+function isDateOnlyLine(text: string): boolean {
+  const datePattern = /^\d{4}[-/年.]\d{1,2}(月)?\s*[-~至]\s*\d{4}[-/年.]\d{1,2}(月)?(\s*\(至今|现在\))?$/;
+  const dateOnlyPattern = /^\d{4}[-/年.]\d{1,2}(月)?(\s*[-~至]\s*(\d{4}[-/年.]\d{1,2}(月)?|至今|现在|present|current))?$/;
+  return datePattern.test(text.trim()) || (dateOnlyPattern.test(text.trim()) && text.includes('20'));
 }
 
 function parseExperienceBlocks(text: string): Experience[] {
@@ -60,56 +66,88 @@ function parseExperienceBlocks(text: string): Experience[] {
   const lines = text.split('\n').filter(l => l.trim());
   
   let currentExp: Experience | null = null;
-  let buffer: string[] = [];
+  let descriptionBuffer: string[] = [];
+  
+  const flushCurrentExp = () => {
+    if (currentExp) {
+      if (descriptionBuffer.length > 0) {
+        currentExp.description = descriptionBuffer.join(' ').replace(/\s+/g, ' ');
+        currentExp.highlights = descriptionBuffer
+          .filter(line => line.startsWith('•') || line.startsWith('-') || line.startsWith('·'))
+          .map(line => line.replace(/^[•\-\·]\s*/, ''));
+      }
+      experiences.push(currentExp);
+    }
+    currentExp = null;
+    descriptionBuffer = [];
+  };
   
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i].trim();
-    
     if (!line) continue;
     
-    const isHeader = isExperienceHeader(line);
-    const hasDate = isDateLine(line);
-    const isCompanyName = /公司|企业|Co\.|Ltd\.|Inc\./.test(line) && line.length < 50;
-    
-    if (isCompanyName || (hasDate && buffer.length > 2)) {
-      if (currentExp) {
-        experiences.push(currentExp);
+    if (isDateOnlyLine(line) || /^(至今|现在|present|current)$/i.test(line)) {
+      if (currentExp && !currentExp.startDate) {
+        const dates = parseDateRange(line);
+        currentExp.startDate = dates.startDate;
+        currentExp.endDate = dates.endDate;
+      } else if (currentExp && currentExp.startDate && !currentExp.endDate) {
+        const dates = parseDateRange(line);
+        currentExp.endDate = dates.endDate;
+      } else if (currentExp && currentExp.startDate && currentExp.endDate) {
+        flushCurrentExp();
       }
+      continue;
+    }
+    
+    const hasDate = isDateLine(line);
+    const isCompanyName = /公司|企业|Co\.|Ltd\.|Inc\.|集团|工作室/i.test(line) && line.length < 60;
+    const isBullet = line.startsWith('•') || line.startsWith('-') || line.startsWith('·');
+    const hasMetrics = /\d+%|\d+倍|\d+个|\d+人|\d+万|\d+天/.test(line);
+    
+    if (isCompanyName || (hasDate && currentExp && currentExp.company)) {
+      flushCurrentExp();
       
       currentExp = {
         company: isCompanyName ? line : '',
         position: '',
-        startDate: '',
-        endDate: '',
+        startDate: hasDate && !isCompanyName ? parseDateRange(line).startDate : '',
+        endDate: hasDate && !isCompanyName ? parseDateRange(line).endDate : '',
         description: '',
         highlights: [],
       };
       
-      buffer = [];
-    }
-    
-    if (currentExp) {
-      if (hasDate && !currentExp.startDate) {
-        const dates = parseDateRange(line);
-        currentExp.startDate = dates.startDate;
-        currentExp.endDate = dates.endDate;
-      } else if (!isCompanyName && line.length > 5) {
-        if (!currentExp.position && !hasDate) {
-          currentExp.position = line;
-        } else {
-          currentExp.description += line + ' ';
-          
-          if (line.startsWith('•') || line.startsWith('-') || line.startsWith('·') || /\d+%|\d+倍|\d+个/.test(line)) {
-            currentExp.highlights.push(line.replace(/^[•\-\·]\s*/, ''));
-          }
+      if (i + 1 < lines.length) {
+        const nextLine = lines[i + 1].trim();
+        if (!isDateOnlyLine(nextLine) && !nextLine.startsWith('•') && !nextLine.startsWith('-') && nextLine.length < 40) {
+          currentExp.position = nextLine;
+          i++;
         }
+      }
+    } else if (!currentExp && (hasDate || line.length < 50)) {
+      flushCurrentExp();
+      
+      currentExp = {
+        company: '',
+        position: line.length < 50 ? line : '',
+        startDate: hasDate ? parseDateRange(line).startDate : '',
+        endDate: hasDate ? parseDateRange(line).endDate : '',
+        description: '',
+        highlights: [],
+      };
+    } else if (currentExp) {
+      if (currentExp.position && !currentExp.startDate && hasDate) {
+        currentExp.startDate = parseDateRange(line).startDate;
+        currentExp.endDate = parseDateRange(line).endDate;
+      } else if (!currentExp.position && line.length < 50 && !isBullet) {
+        currentExp.position = line;
+      } else if (line.length > 5 || isBullet || hasMetrics) {
+        descriptionBuffer.push(line);
       }
     }
   }
   
-  if (currentExp && (currentExp.company || currentExp.description)) {
-    experiences.push(currentExp);
-  }
+  flushCurrentExp();
   
   if (experiences.length === 0 && text.trim()) {
     experiences.push({
@@ -130,24 +168,51 @@ function parseProjectBlocks(text: string): Project[] {
   const lines = text.split('\n').filter(l => l.trim());
   
   let currentProj: Project | null = null;
-  let buffer: string[] = [];
+  let descriptionBuffer: string[] = [];
+  
+  const flushCurrentProj = () => {
+    if (currentProj) {
+      if (descriptionBuffer.length > 0) {
+        currentProj.description = descriptionBuffer.join(' ').replace(/\s+/g, ' ');
+        currentProj.metrics = descriptionBuffer
+          .filter(line => /\d+%|\d+倍|\d+个|\d+人|\d+万|\d+天/.test(line));
+      }
+      projects.push(currentProj);
+    }
+    currentProj = null;
+    descriptionBuffer = [];
+  };
   
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i].trim();
-    
     if (!line) continue;
     
-    const isHeader = isProjectHeader(line);
-    const hasDate = isDateLine(line);
-    const isProjectName = /项目/.test(line) || (line.length < 40 && line.length > 2);
-    
-    if (isProjectName || (hasDate && buffer.length > 2)) {
-      if (currentProj) {
-        projects.push(currentProj);
+    if (isDateOnlyLine(line)) {
+      if (currentProj && !currentProj.startDate) {
+        const dates = parseDateRange(line);
+        currentProj.startDate = dates.startDate;
+        currentProj.endDate = dates.endDate;
+      } else if (currentProj && currentProj.startDate && !currentProj.endDate) {
+        const dates = parseDateRange(line);
+        currentProj.endDate = dates.endDate;
+      } else if (currentProj && currentProj.startDate && currentProj.endDate) {
+        flushCurrentProj();
       }
+      continue;
+    }
+    
+    const hasDate = isDateLine(line);
+    const isProjectName = /项目[一二三四五六七八九十\d]/.test(line) || 
+                          /项目名称[：:]/i.test(line) ||
+                          (/项目/.test(line) && line.length < 50);
+    const isBullet = line.startsWith('•') || line.startsWith('-') || line.startsWith('·');
+    const hasMetrics = /\d+%|\d+倍|\d+个|\d+人|\d+万|\d+天/.test(line);
+    
+    if (isProjectName || (hasDate && currentProj && currentProj.name)) {
+      flushCurrentProj();
       
       currentProj = {
-        name: line.replace(/项目名称[：:]\s*/, ''),
+        name: line.replace(/项目[一二三四五六七八九十\d][：:]\s*/, '').replace(/项目名称[：:]\s*/, ''),
         role: '',
         startDate: '',
         endDate: '',
@@ -156,32 +221,49 @@ function parseProjectBlocks(text: string): Project[] {
         metrics: [],
       };
       
-      buffer = [];
-    }
-    
-    if (currentProj) {
-      if (hasDate && !currentProj.startDate) {
+      if (i + 1 < lines.length) {
+        const nextLine = lines[i + 1].trim();
+        if (/角色|职责|负责/.test(nextLine)) {
+          currentProj.role = nextLine;
+          i++;
+        } else if (isDateOnlyLine(nextLine)) {
+          const dates = parseDateRange(nextLine);
+          currentProj.startDate = dates.startDate;
+          currentProj.endDate = dates.endDate;
+          i++;
+        }
+      }
+    } else if (!currentProj && (hasDate || line.length < 60)) {
+      flushCurrentProj();
+      
+      currentProj = {
+        name: line.length < 60 ? line : '',
+        role: '',
+        startDate: hasDate ? parseDateRange(line).startDate : '',
+        endDate: hasDate ? parseDateRange(line).endDate : '',
+        description: '',
+        technologies: [],
+        metrics: [],
+      };
+    } else if (currentProj) {
+      if (/技术栈|技术|框架|工具/.test(line)) {
+        currentProj.technologies = line.split(/[,，、;:]/).map(s => s.trim()).filter(Boolean);
+      } else if (/角色|职责|负责/.test(line) && !currentProj.role) {
+        currentProj.role = line;
+      } else if (currentProj.startDate && !currentProj.endDate && hasDate) {
+        const dates = parseDateRange(line);
+        currentProj.endDate = dates.endDate;
+      } else if (!currentProj.startDate && hasDate) {
         const dates = parseDateRange(line);
         currentProj.startDate = dates.startDate;
         currentProj.endDate = dates.endDate;
-      } else if (/职责|角色|负责/.test(line) && !currentProj.role) {
-        currentProj.role = line;
-      } else if (/技术栈|技术|框架/.test(line)) {
-        currentProj.technologies = line.split(/[,，、;:]/).map(s => s.trim()).filter(Boolean);
-      } else if (line.length > 5) {
-        currentProj.description += line + ' ';
-        
-        const metricMatch = line.match(/\d+%|\d+倍|\d+个|\d+人|\d+万|\d+天/);
-        if (metricMatch) {
-          currentProj.metrics.push(line);
-        }
+      } else if (line.length > 5 || isBullet || hasMetrics) {
+        descriptionBuffer.push(line);
       }
     }
   }
   
-  if (currentProj && (currentProj.name || currentProj.description)) {
-    projects.push(currentProj);
-  }
+  flushCurrentProj();
   
   if (projects.length === 0 && text.trim()) {
     projects.push({
